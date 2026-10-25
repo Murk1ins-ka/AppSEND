@@ -1,4 +1,4 @@
-﻿const {
+const {
   app,
   BrowserWindow,
   ipcMain,
@@ -7,6 +7,7 @@
   shell,
   screen,
   nativeTheme,
+  Menu,
 } = require("electron");
 const path = require("node:path"),
   fs = require("node:fs"),
@@ -25,7 +26,8 @@ let main,
   edgeSide = "top",
   edgeSince = 0,
   edgeFired = false,
-  poll;
+  poll,
+  quitting = false;
 const allowedReceived = new Set();
 let preferences = { language: null, autoReceive: true, method: "normal" },
   preferencesPath;
@@ -55,7 +57,7 @@ function makeWindow(file, opts = {}) {
     minWidth: 720,
     minHeight: 640,
     backgroundColor: "#000000",
-    icon: path.join(__dirname, "assets", "icon.ico"),
+    icon: path.join(__dirname, "assets", process.platform === "win32" ? "icon.ico" : "icon.png"),
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
@@ -73,7 +75,7 @@ function makeWindow(file, opts = {}) {
 function setupEdges() {
   const point = screen.getCursorScreenPoint(),
     display = screen.getDisplayNearestPoint(point),
-    b = display.bounds;
+    b = display.workArea;
   overlay.setBounds(b);
   edge.setBounds(
     edgeSide === "top"
@@ -99,10 +101,38 @@ app.whenReady().then(async () => {
       preferences.language = saved.language;
   } catch {}
   main = makeWindow("index.html");
+  if (process.platform === "darwin") {
+    const action = (type) => () => {
+      main.show();
+      main.focus();
+      handleAction({ sender: main.webContents }, { type });
+    };
+    Menu.setApplicationMenu(Menu.buildFromTemplate([
+      { role: "appMenu" },
+      { label: "File", submenu: [
+        { label: "Choose File…", accelerator: "Cmd+O", click: action("choose") },
+        { label: "Send Clipboard", accelerator: "Cmd+Shift+V", click: action("clipboard") },
+        { label: "Send to Selected Device", accelerator: "Cmd+Return", click: action("send") },
+        { type: "separator" },
+        { role: "close" },
+      ] },
+      { role: "editMenu" },
+      { role: "windowMenu" },
+    ]));
+  }
   main.once("ready-to-show", () => {
     if (!process.env.EDGEBEAM_SMOKE) main.show();
   });
-  main.on("closed", () => app.quit());
+  main.on("close", (event) => {
+    if (process.platform === "darwin" && !quitting) {
+      event.preventDefault();
+      main.hide();
+    }
+  });
+  main.on("closed", () => {
+    main = null;
+    app.quit();
+  });
   overlay = makeWindow("overlay.html", {
     frame: false,
     transparent: true,
@@ -200,7 +230,7 @@ app.whenReady().then(async () => {
     }
     const p = screen.getCursorScreenPoint(),
       d = screen.getDisplayNearestPoint(p),
-      b = d.bounds;
+      b = d.workArea;
     const near =
       edgeSide === "top"
         ? p.y <= b.y + 18
@@ -225,7 +255,7 @@ app.whenReady().then(async () => {
 function trusted(e) {
   return [main?.webContents, edge?.webContents].includes(e.sender);
 }
-ipcMain.handle("action", async (e, { type, value }) => {
+async function handleAction(e, { type, value }) {
   if (!trusted(e)) throw Error("Untrusted renderer");
   try {
     switch (type) {
@@ -350,13 +380,19 @@ ipcMain.handle("action", async (e, { type, value }) => {
   } catch (err) {
     send("error", err.message);
   }
-});
+}
+ipcMain.handle("action", handleAction);
 app.on("second-instance", () => {
+  main?.show();
+  main?.focus();
+});
+app.on("activate", () => {
   main?.show();
   main?.focus();
 });
 app.on("window-all-closed", () => app.quit());
 app.on("before-quit", () => {
+  quitting = true;
   clearInterval(poll);
   discovery?.close();
   engine?.close();

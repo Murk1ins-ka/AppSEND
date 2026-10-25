@@ -8,7 +8,8 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test test/*.test.cjs",
-    "dist": "electron-builder --win nsis"
+    "dist": "electron-builder --win nsis",
+    "dist:mac": "electron-builder --mac dmg --arm64 --x64"
   },
   "dependencies": {
     "mime-types": "3.0.2",
@@ -33,6 +34,16 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.utilities",
+      "icon": "assets/icon.png",
+      "artifactName": "${productName}-${version}-macOS-${arch}.${ext}",
+      "extendInfo": {
+        "NSLocalNetworkUsageDescription": "AppSEND discovers nearby devices and transfers files directly over your local network."
+      },
+      "identity": "-"
     }
   }
 }

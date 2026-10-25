@@ -51,7 +51,7 @@ class Discovery {
             v: 1,
             id,
             name,
-            platform: "Windows",
+            platform: process.platform === "darwin" ? "macOS" : process.platform === "win32" ? "Windows" : "Linux",
             port,
           }),
         );

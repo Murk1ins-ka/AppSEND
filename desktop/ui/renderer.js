@@ -1,3 +1,4 @@
+document.documentElement.dataset.platform = window.beam.platform;
 ﻿const $ = (id) => document.getElementById(id),
   action = (type, value) => window.beam.action(type, value);
 let autoReceive = true;
